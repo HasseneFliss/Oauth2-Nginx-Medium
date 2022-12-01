@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    meta.helm.sh/release-name: kubecost # can be removed if your application isn\'t deployed through Helm
+    meta.helm.sh/release-namespace: kubecost # can be removed if your application isn\'t deployed through Helm
+  labels:
+    application: kubecost-oauth2-proxy
+    app.kubernetes.io/managed-by: Helm # can be removed if your application isn\'t deployed through Helm
+  name: kubecost-oauth2-proxy-svc
+  namespace: medium
+spec:
+  ports:
+  - name: http
+    port: 4180
+    protocol: TCP
+    targetPort: 4180
+  selector:
+    application: kubecost-oauth2-proxy

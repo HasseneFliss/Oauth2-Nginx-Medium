@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    meta.helm.sh/release-name: kubecost # can be removed if your application isn\'t deployed through Helm
+    meta.helm.sh/release-namespace: kubecost # can be removed if your application isn\'t deployed through Helm
+  labels:
+    application: kubecost-oauth2-proxy
+    app.kubernetes.io/managed-by: Helm # can be removed if your application isn\'t deployed through Helm
+  name: kubecost-oauth2-proxy-deployment
+  namespace: medium
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      application: kubecost-oauth2-proxy
+  template:
+    metadata:
+      labels:
+        application: kubecost-oauth2-proxy
+    spec:
+      containers:
+      - args:
+        - --provider=oidc
+        - --azure-tenant=86c45987-0984-4122-a84c-d713fcba108b # Azure AD OAuth2 Proxy application Tenant ID
+        - --pass-access-token=true
+        - --cookie-name=_proxycookie # this can be any name of your choice which you would like OAuth2 Proxy to use for the session cookie
+        - --email-domain=*
+        - --upstream="http://canary-demo.medium.svc.cluster.local:80" #we changed to this value
+        - --http-address=0.0.0.0:4180
+        - --oidc-issuer-url=https://login.microsoftonline.com/86c45987-0984-4122-a84c-d713fcba108b/v2.0
+        name: kubecost-oauth2-proxy
+        image: quay.io/oauth2-proxy/oauth2-proxy:v7.3.0
+        imagePullPolicy: Always
+        env:
+        - name: OAUTH2_PROXY_CLIENT_ID # keep this name - it\'s required to be defined like this by OAuth2 Proxy
+          valueFrom:
+            secretKeyRef:
+              name: client-id
+              key: oauth2_proxy_client_id
+        - name: OAUTH2_PROXY_CLIENT_SECRET # keep this name - it\'s required to be defined like this by OAuth2 Proxy
+          valueFrom:
+            secretKeyRef:
+              name: client-secret
+              key: oauth2_proxy_client_secret
+        - name: OAUTH2_PROXY_COOKIE_SECRET # keep this name - it\'s required to be defined like this by OAuth2 Proxy
+          valueFrom:
+            secretKeyRef:
+              name: cookie-secret
+              key: oauth2_proxy_cookie_secret
+        ports:
+        - containerPort: 4180
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    meta.helm.sh/release-name: kubecost # can be removed if your application isn\'t deployed through Helm
+    meta.helm.sh/release-namespace: kubecost # can be removed if your application isn\'t deployed through Helm
+  labels:
+    application: kubecost-oauth2-proxy
+    app.kubernetes.io/managed-by: Helm # can be removed if your application isn\'t deployed through Helm
+  name: kubecost-oauth2-proxy-svc
+  namespace: medium
+spec:
+  ports:
+  - name: http
+    port: 4180
+    protocol: TCP
+    targetPort: 4180
+  selector:
+    application: kubecost-oauth2-proxy
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/proxy-body-size: "2000m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "32k"
+    meta.helm.sh/release-name: kubecost # can be removed if your application isn\'t deployed through Helm
+    meta.helm.sh/release-namespace: kubecost # can be removed if your application isn\'t deployed through Helm
+  labels:
+    app.kubernetes.io/managed-by: Helm # can be removed if your application isn\'t deployed through Helm
+  name: kubecost-oauth2-proxy-ingress
+  namespace: medium
+spec:
+  ingressClassName: nginx
+   # tls:
+   #  - hosts:
+   #      - kubecost-kris.unicorndomain.com
+   #   secretName: kubecost-oauth2-proxy-ingress-tls-secret
+  rules:
+    - host: medium-demo.com
+      http:
+        paths:
+          - path: /oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: kubecost-oauth2-proxy-svc
+                port:
+                  number: 4180
